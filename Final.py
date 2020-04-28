@@ -1,6 +1,9 @@
 import requests
 import secretos
 import json
+import sqlite3
+from flask import Flask, render_template, request
+app = Flask(__name__)
 
 url = "https://coronavirus-monitor.p.rapidapi.com/coronavirus/latest_stat_by_country.php"
 
@@ -14,22 +17,48 @@ FIB_CACHE = {}
 CACHE_FILENAME = "cache.json"
 
 
-def country_name():
-    response1 = input("Write the name of the country you wish to get information on: ")
-    return response1
+@app.route('/Products')
+def handle_products():
+    conn = sqlite3.connect('final.db')
+    cur = conn.cursor()
 
+    cur.execute('SELECT * from Products as p JOIN Stores as s on p.Available_at=s.Id')
 
-def tellme_zipcode():
-    response1 = input("We'll find restaurants near you who deliver. Tell us your zipcode: ")
-    return response1
+    product_list= []
+
+    for row in cur:
+        product_list.append(f'Product: {row[1]} Use for: {row[3]} Available at: {row[6]},{row[7]}')
+
+    conn.close()
+
+    return render_template('Products.html', product_list=product_list)
 
 
 def make_request_corona(string_country):
+    ''' Makes call to API
+           Parameters:
+           A string
+           ----------
+           Returns
+           json from API call
+           -------
+
+           '''
     querystring = {"country": string_country}
     response = requests.request("GET", url, headers=headers, params=querystring).json()
     return response
 
+
 def clean_corona(response_corona):
+    ''' Cleans data from Coronavirus API call (json)
+     Parameters:
+     A dictionary
+     ----------
+     Returns
+    A dict
+     -------
+
+     '''
     corona_dict = {}
     dict_from_call = response_corona['latest_stat_by_country'][0]
     corona_dict['Country'] = dict_from_call['country_name']
@@ -40,7 +69,32 @@ def clean_corona(response_corona):
     return corona_dict
 
 
+@app.route('/')
+def index():
+    return render_template('covid.html')
+
+
+@app.route('/handle_form', methods=['POST'])
+def handle_the_form():
+    country_name = request.form["country"]
+    results = clean_corona(make_request_corona(country_name))
+    return render_template('covid.html', results=results)
+
+
+def handle_the_form():
+    return "Form was processed"
+
+
 def make_request_yelp_hospitals(string_zipcode):
+    ''' Checks if url is in cache, if it isn´t it makes the API call and saves url in cache for call
+        (through function)
+            Parameters:
+            A string (zipcode)
+            ----------
+            Returns
+            -------
+            json from Yelp API call
+            '''
     params = {
         "term": "hospitals",
         "limit": "5",
@@ -57,18 +111,37 @@ def make_request_yelp_hospitals(string_zipcode):
 
 
 def clean_hospitals(response_hospitals):
+    ''' Cleans the list of dicts to extract the desired information only
+            Parameters:
+            A list of dicts
+            ----------
+            Returns:
+            A list
+            -------
+
+            '''
     hospitals_list = []
-    for hospitals_dict in response_hospitals['business']:
+    print(response_hospitals)
+    for hospitals_dict in response_hospitals['businesses']:
         dict_hosp = {}
         dict_hosp['Hospital'] = hospitals_dict['name']
         dict_hosp['Website'] = hospitals_dict['url']
         dict_hosp['Phone'] = hospitals_dict['display_phone']
-        dict_hosp['Address'] = hospitals_dict['display_address'][0]
+        dict_hosp['Address'] = hospitals_dict["location"]['display_address'][0]
         hospitals_list.append(dict_hosp)
     return hospitals_list
 
 
 def make_request_yelp_stayhome(string_zipcode):
+    ''' Checks if url is in cache, if it isn´t it makes the API call and saves url in cache for call
+    (through function)
+        Parameters:
+        A string (zipcode)
+        ----------
+        Returns
+        -------
+        json from Yelp API call
+        '''
     params = {
         "location": string_zipcode,
     }
@@ -82,7 +155,16 @@ def make_request_yelp_stayhome(string_zipcode):
 
 
 def clean_restaurants(response_stayhome):
-    restaurant_list =[]
+    ''' Cleans the list of dicts to extract the desired information only
+        Parameters:
+        A list of dicts
+        ----------
+        Returns:
+        A list
+        -------
+
+        '''
+    restaurant_list = []
     for restaurant_dict in response_stayhome['businesses'][:10]:
         dict_rest = {}
         dict_rest['Name'] = restaurant_dict['name']
@@ -90,6 +172,31 @@ def clean_restaurants(response_stayhome):
         dict_rest['Phone Number'] = restaurant_dict['display_phone']
         restaurant_list.append(dict_rest)
     return restaurant_list
+
+
+@app.route('/symptoms')
+def symptoms():
+    return render_template('symptoms.html')
+
+
+@app.route('/handle_symptoms', methods=['POST'])
+def handle_symptoms():
+    answer = request.form["choice"]
+    return render_template('symptoms.html', answer=answer)
+
+
+@app.route('/handle_restaurants', methods=['POST'])
+def handle_restaurants():
+    zipcode = request.form["zipcoderes"]
+    results_res = clean_restaurants(make_request_yelp_stayhome(zipcode))
+    return render_template('restaurants.html', results_res=results_res)
+
+
+@app.route('/handle_hospitals', methods=['POST'])
+def handle_hospitals():
+    zipcode_hospital = request.form["zipcodehosp"]
+    results_hos = clean_hospitals(make_request_yelp_hospitals(zipcode_hospital))
+    return render_template('hospitals.html', results_hos=results_hos)
 
 
 def open_cache():
@@ -131,13 +238,5 @@ def save_cache(cache_dict):
 
 
 if __name__ == "__main__":
-
-    user_input = country_name()
-    print(make_request_corona(user_input))
-
-    user_zipcode = tellme_zipcode()
-    print(make_request_yelp_stayhome(user_zipcode))
-
-    print(make_request_yelp_hospitals(user_zipcode))
-
+    app.run(debug=True)
 
