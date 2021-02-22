@@ -1,3 +1,7 @@
+Python project:
+
+Focus on API calls and Flask
+
 
 Python Packages used:
 1. requests
@@ -9,5 +13,5 @@ Yelp Fusion API uses private API Keys to authenticate requests.
 My secret API Key was automatically generated after I created my app in Yelp Fusion.
 I used it in my code to authenticate API calls
 
-The same applied to Coronavirus Monitor
+The same applies to Coronavirus Monitor
 
